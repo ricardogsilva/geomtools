@@ -4,14 +4,72 @@
 from math import pi, atan, atan2, cos, sin, radians, degrees, sqrt
 
 from qgis.core import QgsPoint, QgsGeometry
+from qgis.gui import QgsVertexMarker
 
 # TODO
 # - replace the slope calculation using scipy polyfit with a linear regression
+
+class VertexMarker(QgsVertexMarker):
+    point = Point(0, 0)
+
+    @property
+    def x(self):
+        return self.point.x()
+
+    @x.setter
+    def x(self, x):
+        self.point.setX(x)
+        self._update()
+
+    @property
+    def y(self):
+        return self.point.y()
+
+    @y.setter
+    def y(self, y):
+        self.point.setY(y)
+        self._update()
+        
+    def __init__(self, map_canvas, point=None):
+        super(VertexMarker, self).__init__(map_canvas)
+        self.canvas = map_canvas
+        if point is None:
+            self.point = Point(0, 0)
+        else:
+            self.point = point
+        self._update()
+
+    def translate(self, angle, distance):
+        self.point.translate(angle, distance)
+        self._update()
+
+    def rotate(self, angle, reference):
+        '''
+        Rotate at an angle, according to a reference object.
+
+        Inputs:
+
+            angle - Angle measured in degrees counter-clockwise from east.
+
+            reference - Any object that has x() and y() methods.
+        '''
+
+        self.point.rotate(angle, reference)
+        self._update()
+
+    def to_point(self):
+        return self.point
+
+    def _update(self):
+        self.setCenter(self.point)
+        self.canvas.refresh()
+
 
 class Point(QgsPoint):
 
     def angle(self, other_point):
         '''Return the angle between this point and other_point'''
+
         dx = other_point.x() - self.x()
         dy = other_point.y() - self.y()
         angle = atan2(dy, dx)
@@ -32,7 +90,11 @@ class Point(QgsPoint):
         return sqrt(dx ** 2 + dy ** 2)
 
     def rotate(self, angle, reference):
-        raise NotImplementedError
+        phi = radians(angle)
+        dx = self.x() - reference.x()
+        dy = self.y() - reference.y()
+        self.setX(dx * cos(phi) - dy * sin(phi) + reference.x())
+        self.setY(dx * sin(phi) + dy * cos(phi) + reference.y())
 
 
 class Line(object):
@@ -137,8 +199,6 @@ class Line(object):
             current += first.distance(last)
             i += 1
         remaining_dist = abs(distance - current)
-        print('current: %s' % current)
-        print('remaining_dist: %s' % remaining_dist)
         if remaining_dist > 0:
             angle = first.angle(last)
             the_point = Point(first.x(), first.y())
@@ -151,14 +211,10 @@ class Line(object):
     def rotate(self, angle, reference=None):
         '''Rotate the line around input reference point.'''
 
-        phi = radians(angle)
         if reference is None:
             reference = self.points[0]
         for p in self.points:
-            dx = p.x() - reference.x()
-            dy = p.y() - reference.y()
-            p.setX(dx * cos(phi) - dy * sin(phi) + reference.x())
-            p.setY(dx * sin(phi) + dy * cos(phi) + reference.y())
+            p.rotate(angle, reference)
 
     def to_geometry(self):
         '''Return this line as a QgsGeometry instance.'''
