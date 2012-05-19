@@ -7,6 +7,7 @@ from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 
 import qgis.core
+import qgis.gui
 
 from base import Point, Line, VertexMarker
 
@@ -50,7 +51,6 @@ class Tool(object):
         return result
 
     def toggle(self, layer):
-        print('layer: %s' % layer)
         if self._selection_correct(layer):
             self.action.setEnabled(True)
         else:
@@ -63,19 +63,37 @@ class TestTool(Tool):
 
     def __init__(self, iface, tool_bar):
         super(TestTool, self).__init__(iface, tool_bar)
+        self.rotation_marker = VertexMarker(self.canvas)
+        self.rotation_marker.hide()
         self.action = QAction(QIcon(':plugins/cadtools/icons/pointandline.png'), 'test', self.iface.mainWindow())
         tool_bar.addAction(self.action)
+        self.map_tool = qgis.gui.QgsMapToolEmitPoint(self.canvas)
         QObject.connect(self.action, SIGNAL("triggered()"), self.run)
         QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
         QObject.connect(self.canvas, SIGNAL("selectionChanged(QgsMapLayer *)"), self.toggle)
+        QObject.connect(self.canvas, SIGNAL('xyCoordinates(const QgsPoint &)'), self.mouse_position)
 
     def run(self):
+        QObject.connect(self.map_tool, SIGNAL("canvasClicked(const ' \
+                        'QgsPoint &, Qt::MouseButton)"), self.canvas_clicked)
         current_layer = self.iface.mapCanvas().currentLayer()
         selected_features = current_layer.selectedFeatures()
         feat = selected_features[0]
         p = Point.from_feature(feat)
-        v = VertexMarker(self.canvas, p)
-        print(v)
+        self.rotation_marker.x = p.x()
+        self.rotation_marker.y = p.y()
+        self.rotation_marker.show()
+        self.canvas.setMapTool(self.map_tool)
+
+    def canvas_clicked(self, qgs_point):
+        print('canvas x: %s' % qgs_point.x())
+        print('canvas y: %s' % qgs_point.y())
+        self.rotation_marker.x = qgs_point.x()
+        self.rotation_marker.y = qgs_point.y()
+
+    def mouse_position(self, qgs_point):
+        print('mouse x: %s y: %s' % (qgs_point.x(), qgs_point.y()))
+
 
 
 class RotateTool(Tool):
