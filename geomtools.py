@@ -9,6 +9,8 @@ from PyQt4.QtGui import *
 import qgis.core
 import qgis.gui
 
+from createnumericaldialog import CreateNumericalDialog
+
 from base import Point, Line, VertexMarker
 
 # TODO
@@ -18,15 +20,14 @@ class GeomTools(object):
 
     def __init__(self, iface):
         self.iface = iface
+        self.canvas = self.iface.mapCanvas()
 
     def initGui(self):
         name = 'geomtools'
         self.tool_bar = self.iface.addToolBar(name)
         self.tool_bar.setObjectName(name)
-        self.test_tool = TestTool(self.iface, self.tool_bar)
-        self.rotate_tool = RotateTool(self.iface, self.tool_bar)
         # add more tools here
-
+        self.create_numerical = CreateNumerical(self.iface, self.tool_bar)
 
     def unload(self):
         del self.tool_bar
@@ -36,25 +37,73 @@ class Tool(object):
 
     OPERATES_ON = []
 
-    def __init__(self, iface, tool_bar):
+    def __init__(self, iface):
         self.iface = iface
         self.canvas = self.iface.mapCanvas()
-        self.tool_bar = tool_bar
+        self.map_layer_registry = qgis.core.QgsMapLayerRegistry.instance()
+        QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
+        QObject.connect(self.canvas, SIGNAL("selectionChanged(QgsMapLayer *)"), self.toggle)
+        #QObject.connect(self.canvas, SIGNAL("editingStarted()"), self.toggle)
 
     def _selection_correct(self, layer):
         result = False
-        if layer is not None:
+        if layer is not None and layer.isEditable():
             for operation in self.OPERATES_ON:
                 if layer.wkbType() == operation.get('type') and \
                         layer.selectedFeatureCount() == operation.get('features'):
                     result = True
         return result
 
-    def toggle(self, layer):
-        if self._selection_correct(layer):
-            self.action.setEnabled(True)
+    def toggle(self, layer=None):
+        if layer is not None:
+            # current layer changed or selection changed
+            if layer.isEditable():
+                QObject.connect(layer, SIGNAL('editingStopped()'), self.toggle)
+                QObject.disconnect(layer, SIGNAL('editingStarted()'), self.toggle)
+                if self._selection_correct(layer):
+                    self.action.setEnabled(True)
+            else:
+                QObject.connect(layer, SIGNAL('editingStarted()'), self.toggle)
+                QObject.disconnect(layer, SIGNAL('editingStopped()'), self.toggle)
+                self.action.setEnabled(False)
         else:
-            self.action.setEnabled(False)
+            # editing started or editing stopped
+            layer = self.canvas.currentLayer()
+            if layer is not None:
+                if layer.isEditable():
+                    if self._selection_correct(layer):
+                        self.action.setEnabled(True)
+                else:
+                    self.action.setEnabled(False)
+
+
+class CreateNumerical(Tool):
+    OPERATES_ON = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 0}]
+
+    def __init__(self, iface, tool_bar):
+        super(CreateNumerical, self).__init__(iface)
+        self.action = QAction(
+            QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'create point with numerical input', 
+            self.iface.mainWindow()
+        )
+        tool_bar.addAction(self.action)
+        QObject.connect(self.action, SIGNAL("triggered()"), self.run)
+        self.toggle()
+
+    def run(self):
+        self.dlg = CreateNumericalDialog()
+        QObject.connect(self.dlg, SIGNAL('point_created'), self.create_vertex)
+        self.dlg.show()
+
+    def create_vertex(self, point):
+        #name = 'numerical create'
+        #tb = self.iface.addToolBar(name)
+        #tb.setObjectName(name)
+        #le = QLineEdit()
+        #tb.addWidget(le)
+        v = VertexMarker(self.canvas, point)
+
 
 
 class TestTool(Tool):
@@ -69,8 +118,8 @@ class TestTool(Tool):
         tool_bar.addAction(self.action)
         self.map_tool = qgis.gui.QgsMapToolEmitPoint(self.canvas)
         QObject.connect(self.action, SIGNAL("triggered()"), self.run)
-        QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
-        QObject.connect(self.canvas, SIGNAL("selectionChanged(QgsMapLayer *)"), self.toggle)
+        #QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
+        #QObject.connect(self.canvas, SIGNAL("selectionChanged(QgsMapLayer *)"), self.toggle)
         QObject.connect(self.canvas, SIGNAL('xyCoordinates(const QgsPoint &)'), self.mouse_position)
 
     def run(self):
@@ -104,8 +153,8 @@ class RotateTool(Tool):
         super(RotateTool, self).__init__(iface, tool_bar)
         self.action = QAction(QIcon(':plugins/cadtools/icons/pointandline.png'), 'rotate', self.iface.mainWindow())
         tool_bar.addAction(self.action)
-        QObject.connect(self.action, SIGNAL("triggered()"), self.rotate)
-        QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
+        #QObject.connect(self.action, SIGNAL("triggered()"), self.rotate)
+        #QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
 
     def rotate(self):
         current_layer = self.iface.mapCanvas().currentLayer()

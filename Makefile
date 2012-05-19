@@ -1,7 +1,6 @@
 PLUGINNAME = geomtools
-UI_FILES = 
+UI_FILES = createnumerical.ui
 RESOURCE_FILES = 
-CODE_FILES = __init__.py geomtools.py base.py
 
 default: compile
 	
@@ -15,6 +14,7 @@ compile: $(UI_FILES) $(RESOURCE_FILES)
 
 deploy: compile
 	mkdir -p $(HOME)/.qgis/python/plugins/$(PLUGINNAME)
-	cp -vf $(CODE_FILES) $(HOME)/.qgis/python/plugins/$(PLUGINNAME)
-	cp -vf $(UI_FILES) $(HOME)/.qgis/python/plugins/$(PLUGINNAME)
-	cp -vf $(RESOURCE_FILES) $(HOME)/.qgis/python/plugins/$(PLUGINNAME)
+	cp -vf *.py $(HOME)/.qgis/python/plugins/$(PLUGINNAME)
+
+clean:
+	rm -rf $(HOME)/.qgis/python/plugins/$(PLUGINNAME)
