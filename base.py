@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 
+from math import pi, atan, atan2, cos, sin, radians, degrees, sqrt
+
 from qgis.core import QgsPoint, QgsGeometry
 from qgis.gui import QgsVertexMarker
 
@@ -223,7 +225,7 @@ class VertexMarker(QgsVertexMarker):
 
     def _update(self):
         self.setCenter(self.point)
-        self.canvas.refresh()
+        #self.canvas.refresh()
 
     def __repr__(self):
         return '%s %s' % (self.__class__.__name__, self.point)

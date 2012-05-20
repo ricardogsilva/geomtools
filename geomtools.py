@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 
-from math import pi, atan, atan2, cos, sin, radians, degrees, sqrt
-
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 
@@ -115,7 +113,10 @@ class CreateNumerical(Tool):
         self.reference_marker = base.VertexMarker(self.canvas, base.Point())
         self.reference_marker.hide()
         self.target_marker = base.VertexMarker(self.canvas, base.Point())
+        self.target_marker.setColor(QColor(0, 0, 255))
+        self.target_marker.setIconType(qgis.gui.QgsVertexMarker.ICON_BOX)
         self.target_marker.hide()
+        self.toggleable_widgets = []
         self.action = QAction(
             QIcon(':plugins/cadtools/icons/pointandline.png'), 
             'create point with numerical input', 
@@ -139,14 +140,13 @@ class CreateNumerical(Tool):
         self.toggle()
 
     def run(self, active):
-        #self.dlg = CreateNumericalDialog()
-        #QObject.connect(self.dlg, SIGNAL('point_selected'), self.create_vertex)
-        #self.dlg.show()
         self.toggle_controls(active)
         if active:
             self.reference_marker.show()
+            self.target_marker.show()
         else:
             self.reference_marker.hide()
+            self.target_marker.hide()
 
     def _create_controls(self):
         self.ref_lab = QLabel(None)
@@ -160,8 +160,6 @@ class CreateNumerical(Tool):
 
         self.offset_radio = QRadioButton('Offset', None)
         self.angle_dist_radio = QRadioButton('Angle && distance', None)
-        QObject.connect(self.offset_radio, SIGNAL('toggled(bool)'), self.toggle_mode_controls)
-        self.offset_radio.setChecked(True)
 
         self.coor_x_lab = QLabel(None)
         self.coor_x_lab.setText('X')
@@ -172,8 +170,10 @@ class CreateNumerical(Tool):
 
         self.coor_distance_lab = QLabel(None)
         self.coor_distance_lab.setText('Distance')
+        self.coor_distance_le = QLineEdit(None)
         self.coor_angle_lab = QLabel(None)
         self.coor_angle_lab.setText('Angle')
+        self.coor_angle_le = QLineEdit(None)
 
         self.create_point_btn = QPushButton(None)
         self.create_point_btn.setText('Create')
@@ -187,6 +187,26 @@ class CreateNumerical(Tool):
             SIGNAL('textChanged(const QString &)'), 
             self.change_reference_parameter_y
         )
+        QObject.connect(
+            self.coor_x_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_target_offset_x
+        )
+        QObject.connect(
+            self.coor_y_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_target_offset_y
+        )
+        QObject.connect(
+            self.coor_distance_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_target_distance
+        )
+        QObject.connect(
+            self.coor_angle_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_target_angle
+        )
         QObject.connect(self.create_point_btn, SIGNAL('released()'), 
                         self.create_point)
 
@@ -199,13 +219,42 @@ class CreateNumerical(Tool):
         self.tool_bar.addSeparator()
         self.tool_bar.addWidget(self.offset_radio)
         self.tool_bar.addWidget(self.angle_dist_radio)
+        # storing QActions in order to be able to hide and show them later
+        self.action_coor_x_lab = self.tool_bar.addWidget(self.coor_x_lab)
+        self.action_coor_x_le = self.tool_bar.addWidget(self.coor_x_le)
+        self.action_coor_y_lab = self.tool_bar.addWidget(self.coor_y_lab)
+        self.action_coor_y_le = self.tool_bar.addWidget(self.coor_y_le)
+        self.action_coor_distance_lab = self.tool_bar.addWidget(self.coor_distance_lab)
+        self.action_coor_distance_le = self.tool_bar.addWidget(self.coor_distance_le)
+        self.action_coor_angle_lab = self.tool_bar.addWidget(self.coor_angle_lab)
+        self.action_coor_angle_le = self.tool_bar.addWidget(self.coor_angle_le)
+        QObject.connect(self.offset_radio, SIGNAL('toggled(bool)'), 
+                        self.toggle_mode_controls)
+        self.offset_radio.setChecked(True)
         self.tool_bar.addSeparator()
-        self.tool_bar.addWidget(self.coor_x_lab)
-        self.tool_bar.addWidget(self.coor_x_le)
-        self.tool_bar.addWidget(self.coor_y_lab)
-        self.tool_bar.addWidget(self.coor_y_le)
         self.tool_bar.addWidget(self.create_point_btn)
         self._update_controls()
+
+    def toggle_mode_controls(self, offsets_active):
+        if offsets_active:
+            self.action_coor_distance_lab.setVisible(False)
+            self.action_coor_distance_le.setVisible(False)
+            self.action_coor_angle_lab.setVisible(False)
+            self.action_coor_angle_le.setVisible(False)
+            self.action_coor_x_lab.setVisible(True)
+            self.action_coor_x_le.setVisible(True)
+            self.action_coor_y_lab.setVisible(True)
+            self.action_coor_y_le.setVisible(True)
+        else:
+            self.action_coor_x_lab.setVisible(False)
+            self.action_coor_x_le.setVisible(False)
+            self.action_coor_y_lab.setVisible(False)
+            self.action_coor_y_le.setVisible(False)
+            self.action_coor_distance_lab.setVisible(True)
+            self.action_coor_distance_le.setVisible(True)
+            self.action_coor_angle_lab.setVisible(True)
+            self.action_coor_angle_le.setVisible(True)
+        self.update_target_marker_position()
 
     def change_reference_parameter_x(self, the_text):
         self.parameters.get('reference').setX(QVariant(the_text).toFloat()[0])
@@ -214,6 +263,22 @@ class CreateNumerical(Tool):
     def change_reference_parameter_y(self, the_text):
         self.parameters.get('reference').setY(QVariant(the_text).toFloat()[0])
         self.update_reference_marker_position()
+
+    def change_target_offset_x(self, the_text):
+        self.parameters['offset_x'] = QVariant(the_text).toFloat()[0]
+        self.update_target_marker_position()
+
+    def change_target_offset_y(self, the_text):
+        self.parameters['offset_y'] = QVariant(the_text).toFloat()[0]
+        self.update_target_marker_position()
+
+    def change_target_distance(self, the_text):
+        self.parameters['distance'] = QVariant(the_text).toFloat()[0]
+        self.update_target_marker_position()
+
+    def change_target_angle(self, the_text):
+        self.parameters['angle'] = QVariant(the_text).toFloat()[0]
+        self.update_target_marker_position()
 
     def toggle_reference_selection(self, active):
         if active:
@@ -234,19 +299,38 @@ class CreateNumerical(Tool):
         self.ref_y_le.setText(str(self.parameters.get('reference').y()))
         self.coor_x_le.setText(str(self.parameters.get('offset_x')))
         self.coor_y_le.setText(str(self.parameters.get('offset_y')))
+        self.coor_distance_le.setText(str(self.parameters.get('distance')))
+        self.coor_angle_le.setText(str(self.parameters.get('angle')))
 
     def update_reference_marker_position(self):
         self.reference_marker.x = self.parameters.get('reference').x()
         self.reference_marker.y = self.parameters.get('reference').y()
+        self.update_target_marker_position()
 
-    #def update_target_marker_position(self):
-    #    self.target_marker.x = self.parameters.get('reference').x()
-    #    self.target_marker.y = self.parameters.get('reference').y()
+    def update_target_marker_position(self):
+        new_point = self.calculate_point()
+        self.target_marker.x = new_point.x()
+        self.target_marker.y = new_point.y()
+
+    def calculate_point(self):
+        ref = self.parameters.get('reference')
+        new_point = base.Point(ref.x(), ref.y())
+        if self.offset_radio.isChecked():
+            new_point.translate_offsets(self.parameters.get('offset_x'), 
+                                        self.parameters.get('offset_y'))
+        else:
+            new_point.translate(self.parameters.get('angle'), 
+                                self.parameters.get('distance'))
+        return new_point
 
     def create_point(self):
-        v = base.VertexMarker(self.canvas, point)
-        v.setColor = QColor(0, 0, 255)
-
+        layer = self.canvas.currentLayer()
+        point = self.calculate_point()
+        f = qgis.core.QgsFeature()
+        geom = qgis.core.QgsGeometry.fromPoint(point)
+        f.setGeometry(geom)
+        layer.addFeatures([f], False)
+        self.canvas.refresh()
 
 
 class TestTool(Tool):
