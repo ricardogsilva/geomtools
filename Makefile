@@ -1,5 +1,5 @@
 PLUGINNAME = geomtools
-UI_FILES = createnumerical.ui
+UI_FILES = 
 RESOURCE_FILES = 
 
 default: compile

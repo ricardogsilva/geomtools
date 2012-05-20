@@ -7,8 +7,6 @@ from PyQt4.QtGui import *
 import qgis.core
 import qgis.gui
 
-from createnumericaldialog import CreateNumericalDialog
-
 import base
 
 # TODO
