@@ -20,4 +20,4 @@ class CreateNumericalDialog(QDialog, Ui_Dialog):
         x = QVariant(self.xCoordLE.text()).toFloat()[0]
         y = QVariant(self.yCoordLE.text()).toFloat()[0]
         self.point = Point(x, y)
-        self.emit(SIGNAL('point_created'), self.point)
+        self.emit(SIGNAL('point_selected'), self.point)
