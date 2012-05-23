@@ -327,7 +327,9 @@ class CreateNumerical(Tool):
         f = qgis.core.QgsFeature()
         geom = qgis.core.QgsGeometry.fromPoint(point)
         f.setGeometry(geom)
+        layer.beginEditCommand('Create point')
         layer.addFeatures([f], False)
+        layer.endEditCommand()
         self.canvas.refresh()
 
 
