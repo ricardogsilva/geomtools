@@ -10,7 +10,15 @@ import qgis.gui
 import base
 
 # TODO
-# - replace the slope calculation using scipy polyfit with a linear regression
+# - At maximum only one tool must be active at a time, so there has to be a 
+#   way to toggle them
+# - Something is wrong with the undo/redo functionality
+# - Refactor the code, create a subclass of Tool that provides methods for
+#   working with a reference, including the GUI in the toolbox.
+# - Implement more tools:
+#       - Move the selected points according to a reference and target
+#       - Create a point in the center of the bounding box of the selected 
+#         points
 
 class GeomTools(object):
 
@@ -29,6 +37,8 @@ class GeomTools(object):
         self.create_numerical = CreateNumerical(self.iface, 
                                                 self.icon_tool_bar, 
                                                 self.controls_tool_bar)
+        self.move_reference = MoveReference(self.iface, self.icon_tool_bar, 
+                                            self.controls_tool_bar)
 
     def unload(self):
         del self.icon_tool_bar
@@ -50,9 +60,12 @@ class Tool(object):
         result = False
         if layer is not None and layer.isEditable():
             for operation in self.OPERATES_ON:
-                if layer.wkbType() == operation.get('type') and \
-                        layer.selectedFeatureCount() == operation.get('features'):
-                    result = True
+                if layer.wkbType() == operation.get('type'):
+                    if layer.selectedFeatureCount() == operation.get('features'):
+                        result = True
+                    elif layer.selectedFeatureCount() > 0 and \
+                            operation.get('features') == 'multiple':
+                        result = True
         return result
 
     def toggle(self, layer=None):
@@ -94,6 +107,67 @@ class Tool(object):
         # provide your own _create_controls() method for each tool
         raise NotImplementedError
 
+    def try_to_snap(self, point, snapping_type=qgis.core.QgsSnapper.SnapToVertex):
+        '''
+        Try to snap the input point to a layer displayed in the map canvas.
+
+        Inputs:
+
+            point - A QPoint instance
+
+            snapping_type - A QgsSnapper.SnappingType type
+
+        Snapping is done on the current layer first and then, in case of
+        failure, in the other layers.
+        '''
+
+        snapped_point = None
+        snapper = qgis.gui.QgsMapCanvasSnapper(self.canvas)
+        retval, result = snapper.snapToCurrentLayer(point, snapping_type)
+        if len(result) == 0:
+            retval, result = snapper.snapToBackgroundLayers(point)
+        if len(result) != 0:
+            snapped_point = base.Point(result[0].snappedVertex)
+        return snapped_point
+
+class ToolWithReference(Tool):
+
+    parameters = {
+        'reference' : base.Point(0, 0),
+    }
+
+    def __init__(self, iface, icon_tool_bar, controls_tool_bar):
+        super(ToolWithReference, self).__init__(iface, icon_tool_bar, 
+                                                controls_tool_bar)
+        self.reference_marker = base.VertexMarker(self.canvas, base.Point())
+        self.reference_marker.hide()
+        self.map_tool = qgis.gui.QgsMapToolEmitPoint(self.canvas)
+        self.ref_action = QAction(
+            QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'select a point in the map window to be used as reference point', 
+            self.iface.mainWindow()
+        )
+        self.ref_action.setCheckable(True)
+        QObject.connect(self.ref_action, SIGNAL('toggled(bool)'), 
+                        self.toggle_reference_selection)
+
+    def _create_reference_controls(self):
+        raise NotImplementedError
+
+    def change_reference_parameter_x(self, the_text):
+        self.parameters.get('reference').setX(QVariant(the_text).toFloat()[0])
+        self.update_reference_marker_position()
+
+    def change_reference_parameter_y(self, the_text):
+        self.parameters.get('reference').setY(QVariant(the_text).toFloat()[0])
+        self.update_reference_marker_position()
+
+    def toggle_reference_selection(self, active):
+        if active:
+            self.canvas.setMapTool(self.map_tool)
+        else:
+            self.canvas.unsetMapTool(self.map_tool)
+
 
 class CreateNumerical(Tool):
     OPERATES_ON = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 0}]
@@ -114,7 +188,6 @@ class CreateNumerical(Tool):
         self.target_marker.setColor(QColor(0, 0, 255))
         self.target_marker.setIconType(qgis.gui.QgsVertexMarker.ICON_BOX)
         self.target_marker.hide()
-        self.toggleable_widgets = []
         self.action = QAction(
             QIcon(':plugins/cadtools/icons/pointandline.png'), 
             'create point with numerical input', 
@@ -285,7 +358,12 @@ class CreateNumerical(Tool):
             self.canvas.unsetMapTool(self.map_tool)
 
     def get_point(self, qgs_point, mouseButton):
-        p = base.Point(qgs_point)
+        canvas_point = self.map_tool.toCanvasCoordinates(qgs_point)
+        snapped_point = self.try_to_snap(canvas_point)
+        if snapped_point is None:
+            p = base.Point(qgs_point)
+        else:
+            p = snapped_point
         self.parameters['reference'] = p
         self._update_controls()
         self.reference_marker.x = p.x()
@@ -330,58 +408,163 @@ class CreateNumerical(Tool):
         layer.addFeatures([f], False)
         self.canvas.refresh()
 
+class MoveReference(Tool):
+    OPERATES_ON = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 'multiple'}]
 
-class TestTool(Tool):
-
-    OPERATES_ON = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 1}]
-
-    def __init__(self, iface, tool_bar):
-        super(TestTool, self).__init__(iface, tool_bar)
-        self.rotation_marker = VertexMarker(self.canvas)
-        self.rotation_marker.hide()
-        self.action = QAction(QIcon(':plugins/cadtools/icons/pointandline.png'), 'test', self.iface.mainWindow())
-        tool_bar.addAction(self.action)
+    def __init__(self, iface, icon_tool_bar, controls_tool_bar):
+        super(MoveReference, self).__init__(iface, icon_tool_bar, 
+                                            controls_tool_bar)
+        self.parameters = {
+            'reference' : base.Point(0, 0),
+            'target' : base.Point(0, 0),
+        }
+        self.reference_marker = base.VertexMarker(self.canvas, base.Point())
+        self.reference_marker.hide()
+        self.target_marker = base.VertexMarker(self.canvas, base.Point())
+        self.target_marker.setColor(QColor(0, 0, 255))
+        self.target_marker.setIconType(qgis.gui.QgsVertexMarker.ICON_BOX)
+        self.target_marker.hide()
+        self.action = QAction(
+            QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'Move points according to a reference', 
+            self.iface.mainWindow()
+        )
+        self.action.setCheckable(True)
+        icon_tool_bar.addAction(self.action)
+        self.ref_action = QAction(
+            QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'select a point in the map window for being the reference', 
+            self.iface.mainWindow()
+        )
+        self.ref_action.setCheckable(True)
+        self.target_action = QAction(
+            QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'select a point in the map window for being the target', 
+            self.iface.mainWindow()
+        )
+        self.tool_bar = controls_tool_bar
         self.map_tool = qgis.gui.QgsMapToolEmitPoint(self.canvas)
-        QObject.connect(self.action, SIGNAL("triggered()"), self.run)
-        #QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
-        #QObject.connect(self.canvas, SIGNAL("selectionChanged(QgsMapLayer *)"), self.toggle)
-        QObject.connect(self.canvas, SIGNAL('xyCoordinates(const QgsPoint &)'), self.mouse_position)
+        QObject.connect(self.action, SIGNAL("toggled(bool)"), self.run)
+        QObject.connect(self.map_tool, SIGNAL('canvasClicked(const '\
+                        'QgsPoint &, Qt::MouseButton)'), self.get_point)
+        QObject.connect(self.ref_action, SIGNAL('toggled(bool)'), 
+                        self.toggle_map_tool_selection)
+        QObject.connect(self.target_action, SIGNAL('toggled(bool)'), 
+                        self.toggle_map_tool_selection)
+        self.toggle()
 
-    def run(self):
-        QObject.connect(self.map_tool, SIGNAL("canvasClicked(const ' \
-                        'QgsPoint &, Qt::MouseButton)"), self.canvas_clicked)
-        current_layer = self.iface.mapCanvas().currentLayer()
-        selected_features = current_layer.selectedFeatures()
-        feat = selected_features[0]
-        p = base.Point.from_feature(feat)
-        self.rotation_marker.x = p.x()
-        self.rotation_marker.y = p.y()
-        self.rotation_marker.show()
-        self.canvas.setMapTool(self.map_tool)
+    def run(self, active):
+        self.toggle_controls(active)
+        if active:
+            self.reference_marker.show()
+            self.target_marker.show()
+        else:
+            self.reference_marker.hide()
+            self.target_marker.hide()
 
-    def canvas_clicked(self, qgs_point):
-        print('canvas x: %s' % qgs_point.x())
-        print('canvas y: %s' % qgs_point.y())
-        self.rotation_marker.x = qgs_point.x()
-        self.rotation_marker.y = qgs_point.y()
+    def _create_controls(self):
+        self.ref_lab = QLabel(None)
+        self.ref_lab.setText('Reference:')
+        self.ref_x_lab = QLabel(None)
+        self.ref_x_lab.setText('X')
+        self.ref_x_le = QLineEdit(None)
+        self.ref_y_lab = QLabel(None)
+        self.ref_y_lab.setText('Y')
+        self.ref_y_le = QLineEdit(None)
 
-    def mouse_position(self, qgs_point):
-        print('mouse x: %s y: %s' % (qgs_point.x(), qgs_point.y()))
+        self.target_lab = QLabel(None)
+        self.target_lab.setText('Target:')
+        self.target_x_lab = QLabel(None)
+        self.target_x_lab.setText('X')
+        self.target_x_le = QLineEdit(None)
+        self.target_y_lab = QLabel(None)
+        self.target_y_lab.setText('Y')
+        self.target_y_le = QLineEdit(None)
 
+        self.move_btn = QPushButton(None)
+        self.move_btn.setText('Move')
+        QObject.connect(
+            self.ref_x_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_reference_parameter_x
+        )
+        QObject.connect(
+            self.ref_y_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_reference_parameter_y
+        )
+        QObject.connect(
+            self.target_x_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_target_parameter_x
+        )
+        QObject.connect(
+            self.target_y_le, 
+            SIGNAL('textChanged(const QString &)'), 
+            self.change_target_parameter_y
+        )
+        QObject.connect(self.move_btn, SIGNAL('released()'), 
+                        self.move)
 
+        self.tool_bar.addWidget(self.ref_lab)
+        self.tool_bar.addWidget(self.ref_x_lab)
+        self.tool_bar.addWidget(self.ref_x_le)
+        self.tool_bar.addWidget(self.ref_y_lab)
+        self.tool_bar.addWidget(self.ref_y_le)
+        self.tool_bar.addAction(self.ref_action)
+        self.tool_bar.addSeparator()
+        self.tool_bar.addWidget(self.target_lab)
+        self.tool_bar.addWidget(self.target_x_lab)
+        self.tool_bar.addWidget(self.target_x_le)
+        self.tool_bar.addWidget(self.target_y_lab)
+        self.tool_bar.addWidget(self.target_y_le)
+        self.tool_bar.addAction(self.target_action)
+        self.tool_bar.addSeparator()
+        self.tool_bar.addWidget(self.move_btn)
 
-class RotateTool(Tool):
-    
-    OPERATES_ON = [{'type' : qgis.core.QGis.WKBLineString, 'features' : 1}]
+    def move(self):
+        raise NotImplementedError
 
-    def __init__(self, iface, tool_bar):
-        super(RotateTool, self).__init__(iface, tool_bar)
-        self.action = QAction(QIcon(':plugins/cadtools/icons/pointandline.png'), 'rotate', self.iface.mainWindow())
-        tool_bar.addAction(self.action)
-        #QObject.connect(self.action, SIGNAL("triggered()"), self.rotate)
-        #QObject.connect(self.iface, SIGNAL("currentLayerChanged(QgsMapLayer *)"), self.toggle)
+    def toggle_map_tool_selection(self, active):
+        if active:
+            self.canvas.setMapTool(self.map_tool)
+        else:
+            self.canvas.unsetMapTool(self.map_tool)
 
-    def rotate(self):
-        current_layer = self.iface.mapCanvas().currentLayer()
-        print('current_layer: %s' % current_layer)
+    def change_reference_parameter_x(self, the_text):
+        self.parameters.get('reference').setX(QVariant(the_text).toFloat()[0])
+        self.update_reference_marker_position()
+
+    def change_reference_parameter_y(self, the_text):
+        self.parameters.get('reference').setY(QVariant(the_text).toFloat()[0])
+        self.update_reference_marker_position()
+
+    def change_target_parameter_x(self, the_text):
+        self.parameters.get('target').setX(QVariant(the_text).toFloat()[0])
+        self.update_target_marker_position()
+
+    def change_target_parameter_y(self, the_text):
+        self.parameters.get('target').setY(QVariant(the_text).toFloat()[0])
+        self.update_target_marker_position()
+
+    def update_reference_marker_position(self):
+        self.reference_marker.x = self.parameters.get('reference').x()
+        self.reference_marker.y = self.parameters.get('reference').y()
+
+    def update_target_marker_position(self):
+        self.target_marker.x = self.parameters.get('target').x()
+        self.target_marker.y = self.parameters.get('target').y()
+
+    def get_point(self, qgs_point, mouseButton):
+        canvas_point = self.map_tool.toCanvasCoordinates(qgs_point)
+        snapped_point = self.try_to_snap(canvas_point)
+        if snapped_point is None:
+            p = base.Point(qgs_point)
+        else:
+            p = snapped_point
+        self.parameters['reference'] = p
+        self._update_controls()
+        self.reference_marker.x = p.x()
+        self.reference_marker.y = p.y()
+        self.ref_action.toggle()
 
