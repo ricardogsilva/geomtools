@@ -10,10 +10,6 @@ import qgis.gui
 import base
 
 # TODO
-# - MoveReference tool: 
-#       - add a 'rotation' field to the GUI
-#       - add a 'copy' checkbox to the GUI
-#       - implement the actual moving/copying of the points
 # - At maximum only one tool must be active at a time, so there has to be a 
 #   way to toggle them
 # - Implement more tools:
@@ -404,6 +400,8 @@ class MoveReference(ToolWithReference):
             'target' : base.Point(0, 0),
             'new_points' : [],
             'markers': [],
+            'copy' : False,
+            'rotate' : 0,
         }
         self.target_marker = base.VertexMarker(self.canvas, base.Point())
         self.target_marker.setColor(QColor(0, 0, 255))
@@ -452,6 +450,15 @@ class MoveReference(ToolWithReference):
         self.target_y_lab.setText('Y')
         self.target_y_le = QLineEdit(None)
 
+        self.rotate_lab = QLabel('Rotate', None)
+        self.rotate_sb = QDoubleSpinBox(None)
+        self.rotate_sb.setMinimum(0)
+        self.rotate_sb.setMaximum(360)
+        self.rotate_sb.setDecimals(0)
+        self.rotate_sb.setSuffix(u'\u00b0')
+
+        self.copy_cb = QCheckBox('copy', None)
+
         self.move_btn = QPushButton(None)
         self.move_btn.setText('Move')
 
@@ -467,8 +474,12 @@ class MoveReference(ToolWithReference):
         )
         QObject.connect(self.move_btn, SIGNAL('released()'), 
                         self.move)
+        QObject.connect(self.copy_cb, SIGNAL('stateChanged(int)'), 
+                        self.toggle_copy)
+        QObject.connect(self.rotate_sb, SIGNAL('valueChanged(double)'), 
+                        self.change_target_rotation)
+        self.copy_cb.setChecked(False)
 
-        self.tool_bar.addSeparator()
         self.tool_bar.addWidget(self.target_lab)
         self.tool_bar.addWidget(self.target_x_lab)
         self.tool_bar.addWidget(self.target_x_le)
@@ -476,6 +487,10 @@ class MoveReference(ToolWithReference):
         self.tool_bar.addWidget(self.target_y_le)
         self.tool_bar.addAction(self.target_action)
         self.tool_bar.addSeparator()
+        self.tool_bar.addWidget(self.rotate_lab)
+        self.tool_bar.addWidget(self.rotate_sb)
+        self.tool_bar.addSeparator()
+        self.tool_bar.addWidget(self.copy_cb)
         self.tool_bar.addWidget(self.move_btn)
         self._update_controls()
 
@@ -483,6 +498,7 @@ class MoveReference(ToolWithReference):
         super(MoveReference, self)._update_controls()
         self.target_x_le.setText(str(self.parameters['target'].x()))
         self.target_y_le.setText(str(self.parameters['target'].y()))
+        self.rotate_sb.setValue(self.parameters.get('rotate'))
 
     def toggle_markers(self, active):
         if active:
@@ -492,11 +508,36 @@ class MoveReference(ToolWithReference):
             for m in self.parameters['markers']:
                 m.hide()
 
+    def toggle_copy(self):
+        if self.copy_cb.isChecked():
+            self.parameters['copy'] = True
+            self.move_btn.setText('Copy')
+        else:
+            self.parameters['copy'] = False
+            self.move_btn.setText('Move')
+
     def move(self):
         layer = self.canvas.currentLayer()
         feats = layer.selectedFeatures()
         self.calculate_points(feats)
-        self.draw_markers()
+        if self.parameters.get('copy'):
+            new_features = []
+            for p in self.parameters.get('new_points'):
+                geom = qgis.core.QgsGeometry.fromPoint(p)
+                feat = qgis.core.QgsFeature()
+                feat.setGeometry(geom)
+                new_features.append(feat)
+            layer.beginEditCommand('Create points')
+            layer.addFeatures(new_features, False)
+            layer.endEditCommand()
+        else:
+            layer.beginEditCommand('Move points')
+            for index, f in enumerate(feats):
+                point = self.parameters.get('new_points')[index]
+                geom = qgis.core.QgsGeometry.fromPoint(point)
+                layer.changeGeometry(f.id(), geom)
+            layer.endEditCommand()
+        self.canvas.refresh()
 
     def calculate_points(self, feature_list):
         self.parameters['new_points'] = []
@@ -505,6 +546,7 @@ class MoveReference(ToolWithReference):
         for f in feature_list:
             point = base.Point.from_feature(f)
             point.translate_offsets(offset_x, offset_y)
+            point.rotate(self.parameters.get('rotate'), self.parameters['target'])
             self.parameters['new_points'].append(point)
 
     def draw_markers(self):
@@ -531,6 +573,10 @@ class MoveReference(ToolWithReference):
 
     def change_target_parameter_y(self, the_text):
         self.parameters.get('target').setY(QVariant(the_text).toFloat()[0])
+        self.update_target_marker_position()
+
+    def change_target_rotation(self):
+        self.parameters['rotate'] = self.rotate_sb.value()
         self.update_target_marker_position()
 
     def update_target_marker_position(self):
