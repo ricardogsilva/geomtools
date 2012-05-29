@@ -31,9 +31,9 @@ class GeomTools(object):
         self.controls_tool_bar = self.iface.addToolBar(controls_tool_bar_name)
         self.controls_tool_bar.setObjectName(controls_tool_bar_name)
         # add more tools here
-        self.create_numerical = CreateNumerical(self.iface, 
-                                                self.icon_tool_bar, 
-                                                self.controls_tool_bar)
+        self.numerical_points = CreateNumericalPoints(self.iface, 
+                                                      self.icon_tool_bar, 
+                                                      self.controls_tool_bar)
         self.move_reference = MoveReference(self.iface, self.icon_tool_bar, 
                                             self.controls_tool_bar)
 
@@ -217,11 +217,11 @@ class ToolWithReference(Tool):
         self.reference_marker.y = self.reference.y()
 
 
-class CreateNumerical(ToolWithReference):
+class CreateNumericalPoints(ToolWithReference):
     OPERATES_ON = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 0}]
 
     def __init__(self, iface, icon_tool_bar, controls_tool_bar):
-        super(CreateNumerical, self).__init__(iface, icon_tool_bar, 
+        super(CreateNumericalPoints, self).__init__(iface, icon_tool_bar, 
                                               controls_tool_bar)
         self.parameters = {
             'offset_x' : 0.0,
@@ -254,7 +254,7 @@ class CreateNumerical(ToolWithReference):
             self.target_marker.hide()
 
     def _create_controls(self):
-        super(CreateNumerical, self)._create_controls()
+        super(CreateNumericalPoints, self)._create_controls()
         self.offset_radio = QRadioButton('Offset', None)
         self.angle_dist_radio = QRadioButton('Angle && distance', None)
 
@@ -354,14 +354,14 @@ class CreateNumerical(ToolWithReference):
         self.update_target_marker_position()
 
     def _update_controls(self):
-        super(CreateNumerical, self)._update_controls()
+        super(CreateNumericalPoints, self)._update_controls()
         self.coor_x_le.setText(str(self.parameters.get('offset_x')))
         self.coor_y_le.setText(str(self.parameters.get('offset_y')))
         self.coor_distance_le.setText(str(self.parameters.get('distance')))
         self.coor_angle_le.setText(str(self.parameters.get('angle')))
 
     def update_reference_marker_position(self):
-        super(CreateNumerical, self).update_reference_marker_position()
+        super(CreateNumericalPoints, self).update_reference_marker_position()
         self.update_target_marker_position()
 
     def update_target_marker_position(self):
@@ -389,6 +389,7 @@ class CreateNumerical(ToolWithReference):
         layer.addFeatures([f], False)
         layer.endEditCommand()
         self.canvas.refresh()
+
 
 class MoveReference(ToolWithReference):
     OPERATES_ON = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 'multiple'}]
@@ -602,3 +603,40 @@ class MoveReference(ToolWithReference):
         self.target_marker.y = target_point.y()
         self._update_controls()
         self.target_action.toggle()
+
+
+class CreateNumericalLine(ToolWithReference):
+
+    def __init__(self, iface, icon_tool_bar, controls_tool_bar):
+        super(CreateNumericalLine, self).__init__(iface, icon_tool_bar, 
+                                                  controls_tool_bar)
+        self.parameters = {
+            'offset_x' : 0.0,
+            'offset_y' : 0.0,
+            'distance' : 0.0,
+            'angle' : 0.0,
+            'last_point' : self.reference,
+        }
+
+        self.target_marker = base.VertexMarker(self.canvas, base.Point())
+        self.target_marker.setColor(QColor(0, 0, 255))
+        self.target_marker.setIconType(qgis.gui.QgsVertexMarker.ICON_BOX)
+        self.target_marker.hide()
+
+        self.rubber_band = qgis.gui.QgsRubberBand(self.canvas, False)
+        self.rubber_band.setColor(QColor(0, 0, 255))
+        self.rubber_band.hide()
+
+        self.action = QAction(
+            QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'create line with numerical input', 
+            self.iface.mainWindow()
+        )
+        self.action.setCheckable(True)
+        icon_tool_bar.addAction(self.action)
+        self.tool_bar = controls_tool_bar
+        QObject.connect(self.action, SIGNAL("toggled(bool)"), self.run)
+        self.toggle()
+
+    def run(self, active):
+        raise NotImplementedError
