@@ -777,8 +777,11 @@ class CreateNumericalLine(ToolWithReference):
         self.update_rubber_band()
         self.update_rubber_markers()
         self.canvas.refresh()
+        self._update_controls()
 
     def update_rubber_markers(self):
+        scene = self.canvas.scene()
+        [scene.removeItem(m) for m in self.parameters['rubber_markers']]
         self.parameters['rubber_markers'] = []
         for pt in self.parameters['line']:
             rubber_marker = base.VertexMarker(self.canvas, base.Point())
@@ -791,6 +794,8 @@ class CreateNumericalLine(ToolWithReference):
         removed_point = self.parameters['line'].pop()
         self.update_rubber_markers()
         self.update_rubber_band()
+        self._update_controls()
+        self.canvas.refresh()
 
     def update_rubber_band(self):
         line_geom = qgis.core.QgsGeometry.fromPolyline(self.parameters['line'])
@@ -825,13 +830,17 @@ class CreateNumericalLine(ToolWithReference):
         self.coor_y_le.setText(str(self.parameters.get('offset_y')))
         self.coor_distance_le.setText(str(self.parameters.get('distance')))
         self.coor_angle_le.setText(str(self.parameters.get('angle')))
+        self.update_target_marker_position()
 
     def create_line(self):
         raise NotImplementedError
 
     def clear_line(self):
         self.parameters['line'] = []
+        self.update_rubber_markers()
         self.update_rubber_band()
+        self._update_controls()
+        self.canvas.refresh()
 
     def change_target_offset_x(self, the_text):
         self.parameters['offset_x'] = QVariant(the_text).toFloat()[0]
