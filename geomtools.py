@@ -31,14 +31,22 @@ class GeomTools(object):
         self.controls_tool_bar = self.iface.addToolBar(controls_tool_bar_name)
         self.controls_tool_bar.setObjectName(controls_tool_bar_name)
         # add more tools here
-        self.numerical_points = CreateNumericalPoints(self.iface, 
-                                                      self.icon_tool_bar, 
-                                                      self.controls_tool_bar)
-        self.move_reference = MoveReference(self.iface, self.icon_tool_bar, 
-                                            self.controls_tool_bar)
-        self.numerical_lines = CreateNumericalLine(self.iface, 
-                                                   self.icon_tool_bar,
-                                                   self.controls_tool_bar)
+        self.tools = [
+            CreateNumericalPoints(self.iface, self.icon_tool_bar, 
+                                  self.controls_tool_bar),
+            MoveReference(self.iface, self.icon_tool_bar, 
+                          self.controls_tool_bar),
+            CreateNumericalLine(self.iface, self.icon_tool_bar,
+                                self.controls_tool_bar),
+        ]
+        #self.numerical_points = CreateNumericalPoints(self.iface, 
+        #                                              self.icon_tool_bar, 
+        #                                              self.controls_tool_bar)
+        #self.move_reference = MoveReference(self.iface, self.icon_tool_bar, 
+        #                                    self.controls_tool_bar)
+        #self.numerical_lines = CreateNumericalLine(self.iface, 
+        #                                           self.icon_tool_bar,
+        #                                           self.controls_tool_bar)
 
     def unload(self):
         del self.icon_tool_bar
@@ -79,11 +87,13 @@ class Tool(object):
                 self.toggle_editing()
         else:
             # we are coming from currentLayerChanged or selectionChanged
+            self.toggle_action()
             self.toggle_editing()
 
     def toggle_editing(self):
         layer = self.canvas.currentLayer()
-        if layer.isEditable() and self._selection_correct(layer):
+        if layer is not None and layer.isEditable() and \
+                self._selection_correct(layer):
             self.action.setEnabled(True)
             QObject.connect(layer, SIGNAL('editingStopped()'), 
                             self.toggle_editing)
@@ -96,6 +106,19 @@ class Tool(object):
             QObject.disconnect(layer, SIGNAL('editingStopped()'), 
                                self.toggle_editing)
             self.action.setChecked(False)
+
+    def toggle_action(self):
+        layer = self.canvas.currentLayer()
+        action = False
+        for t in self.OPERATES_ON:
+            if layer.wkbType() == t.get('type'):
+                action = True
+        if action:
+            self.action.setVisible(True)
+        else:
+            self.action.setVisible(False)
+        return action
+
 
     def toggle_controls(self, active):
         if active:
@@ -621,16 +644,13 @@ class CreateNumericalLine(ToolWithReference):
             'angle' : 0.0,
             'use_last_point' : False,
             'line' : [],
+            'rubber_markers' : [],
         }
 
         self.target_marker = base.VertexMarker(self.canvas, base.Point())
         self.target_marker.setColor(QColor(0, 0, 255))
         self.target_marker.setIconType(qgis.gui.QgsVertexMarker.ICON_BOX)
         self.target_marker.hide()
-
-        self.rubber_marker = base.VertexMarker(self.canvas, base.Point())
-        self.rubber_marker.setColor(QColor(0, 0, 255))
-        self.rubber_marker.hide()
 
         self.rubber_band = qgis.gui.QgsRubberBand(self.canvas, False)
         self.rubber_band.setColor(QColor(0, 0, 255))
@@ -652,13 +672,13 @@ class CreateNumericalLine(ToolWithReference):
         if active:
             self.reference_marker.show()
             self.target_marker.show()
-            self.rubber_marker.show()
             self.rubber_band.show()
+            [m.show() for m in self.parameters['rubber_markers']]
         else:
             self.reference_marker.hide()
             self.target_marker.hide()
-            self.rubber_marker.hide()
             self.rubber_band.hide()
+            [m.hide() for m in self.parameters['rubber_markers']]
 
     def _create_controls(self):
         super(CreateNumericalLine, self)._create_controls()
@@ -754,12 +774,22 @@ class CreateNumericalLine(ToolWithReference):
     def add_vertex(self):
         new_point = self._get_current_point()
         self.parameters['line'].append(new_point)
-        self.rubber_marker.x = new_point.x()
-        self.rubber_marker.y = new_point.y()
         self.update_rubber_band()
+        self.update_rubber_markers()
+        self.canvas.refresh()
+
+    def update_rubber_markers(self):
+        self.parameters['rubber_markers'] = []
+        for pt in self.parameters['line']:
+            rubber_marker = base.VertexMarker(self.canvas, base.Point())
+            rubber_marker.setColor(QColor(0, 0, 255))
+            rubber_marker.x = pt.x()
+            rubber_marker.y = pt.y()
+            self.parameters['rubber_markers'].append(rubber_marker)
 
     def remove_vertex(self):
         removed_point = self.parameters['line'].pop()
+        self.update_rubber_markers()
         self.update_rubber_band()
 
     def update_rubber_band(self):
