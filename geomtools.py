@@ -92,20 +92,20 @@ class Tool(object):
 
     def toggle_editing(self):
         layer = self.canvas.currentLayer()
-        if layer is not None and layer.isEditable() and \
-                self._selection_correct(layer):
-            self.action.setEnabled(True)
-            QObject.connect(layer, SIGNAL('editingStopped()'), 
-                            self.toggle_editing)
-            QObject.disconnect(layer, SIGNAL('editingStarted()'), 
-                               self.toggle_editing)
-        else:
-            self.action.setEnabled(False)
-            QObject.connect(layer, SIGNAL('editingStarted()'), 
-                            self.toggle_editing)
-            QObject.disconnect(layer, SIGNAL('editingStopped()'), 
-                               self.toggle_editing)
-            self.action.setChecked(False)
+        if layer is not None:
+            if layer.isEditable() and self._selection_correct(layer):
+                self.action.setEnabled(True)
+                QObject.connect(layer, SIGNAL('editingStopped()'), 
+                                self.toggle_editing)
+                QObject.disconnect(layer, SIGNAL('editingStarted()'), 
+                                   self.toggle_editing)
+            else:
+                self.action.setEnabled(False)
+                QObject.connect(layer, SIGNAL('editingStarted()'), 
+                                self.toggle_editing)
+                QObject.disconnect(layer, SIGNAL('editingStopped()'), 
+                                   self.toggle_editing)
+                self.action.setChecked(False)
 
     def toggle_action(self):
         layer = self.canvas.currentLayer()
@@ -118,7 +118,6 @@ class Tool(object):
         else:
             self.action.setVisible(False)
         return action
-
 
     def toggle_controls(self, active):
         if active:
@@ -706,10 +705,10 @@ class CreateNumericalLine(ToolWithReference):
         self.remove_vertex_btn.setText('Remove vertex')
         self.add_vertex_btn = QPushButton(None)
         self.add_vertex_btn.setText('Add vertex')
-        self.finish_line_btn = QPushButton(None)
-        self.finish_line_btn.setText('Finish line')
         self.clear_line_btn = QPushButton(None)
         self.clear_line_btn.setText('Clear line')
+        self.finish_line_btn = QPushButton(None)
+        self.finish_line_btn.setText('Finish line')
 
         QObject.connect(
             self.coor_x_le, 
@@ -737,6 +736,8 @@ class CreateNumericalLine(ToolWithReference):
                         self.remove_vertex)
         QObject.connect(self.clear_line_btn, SIGNAL('released()'), 
                         self.clear_line)
+        QObject.connect(self.finish_line_btn, SIGNAL('released()'), 
+                        self.create_line)
 
         QObject.connect(self.last_point_ref_cb, SIGNAL('stateChanged(int)'), 
                         self.toggle_use_last_point_reference)
@@ -760,15 +761,26 @@ class CreateNumericalLine(ToolWithReference):
         self.tool_bar.addSeparator()
         self.tool_bar.addWidget(self.add_vertex_btn)
         self.tool_bar.addWidget(self.remove_vertex_btn)
-        self.tool_bar.addWidget(self.finish_line_btn)
         self.tool_bar.addWidget(self.clear_line_btn)
+        self.tool_bar.addSeparator()
+        self.tool_bar.addWidget(self.finish_line_btn)
         self._update_controls()
 
     def toggle_use_last_point_reference(self):
         if self.last_point_ref_cb.isChecked():
             self.parameters['use_last_point'] = True
+            self.ref_x_lab.setEnabled(False)
+            self.ref_x_le.setEnabled(False)
+            self.ref_y_lab.setEnabled(False)
+            self.ref_y_le.setEnabled(False)
+            self.ref_action.setEnabled(False)
         else:
             self.parameters['use_last_point'] = False
+            self.ref_x_lab.setEnabled(True)
+            self.ref_x_le.setEnabled(True)
+            self.ref_y_lab.setEnabled(True)
+            self.ref_y_le.setEnabled(True)
+            self.ref_action.setEnabled(True)
         self._update_controls()
 
     def add_vertex(self):
@@ -817,6 +829,7 @@ class CreateNumericalLine(ToolWithReference):
 
     def _update_controls(self):
         if len(self.parameters['line']) == 0:
+            self.last_point_ref_cb.setChecked(False)
             self.last_point_ref_cb.setEnabled(False)
         else:
             self.last_point_ref_cb.setEnabled(True)
@@ -824,6 +837,10 @@ class CreateNumericalLine(ToolWithReference):
             the_reference = self.parameters['line'][-1]
         else:
             the_reference = self.reference
+        if len(self.parameters['line']) < 2:
+            self.finish_line_btn.setEnabled(False)
+        else:
+            self.finish_line_btn.setEnabled(True)
         self.ref_x_le.setText(str(the_reference.x()))
         self.ref_y_le.setText(str(the_reference.y()))
         self.coor_x_le.setText(str(self.parameters.get('offset_x')))
@@ -833,7 +850,18 @@ class CreateNumericalLine(ToolWithReference):
         self.update_target_marker_position()
 
     def create_line(self):
-        raise NotImplementedError
+        layer = self.canvas.currentLayer()
+        f = qgis.core.QgsFeature()
+        geom = qgis.core.QgsGeometry.fromPolyline(self.parameters['line'])
+        f.setGeometry(geom)
+        layer.beginEditCommand('Create line')
+        layer.addFeatures([f], False)
+        layer.endEditCommand()
+        self.parameters['line'] = []
+        self.update_rubber_band()
+        self.update_rubber_markers()
+        self._update_controls()
+        self.canvas.refresh()
 
     def clear_line(self):
         self.parameters['line'] = []
