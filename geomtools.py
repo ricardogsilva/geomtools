@@ -38,6 +38,8 @@ class GeomTools(object):
                           self.controls_tool_bar),
             CreateNumericalLine(self.iface, self.icon_tool_bar,
                                 self.controls_tool_bar),
+            ReverseLine(self.iface, self.icon_tool_bar, 
+                        self.controls_tool_bar),
         ]
         #self.numerical_points = CreateNumericalPoints(self.iface, 
         #                                              self.icon_tool_bar, 
@@ -911,3 +913,39 @@ class CreateNumericalLine(ToolWithReference):
             self.action_coor_angle_lab.setVisible(True)
             self.action_coor_angle_le.setVisible(True)
         self.update_target_marker_position()
+
+
+class ReverseLine(Tool):
+
+    OPERATES_ON = [{'type' : qgis.core.QGis.WKBLineString, 'features' : 'multiple'}]
+
+    def __init__(self, iface, icon_tool_bar, controls_tool_bar):
+        super(ReverseLine, self).__init__(iface, icon_tool_bar, 
+                                          controls_tool_bar)
+
+        self.action = QAction(
+            QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'Reverse line direction', 
+            self.iface.mainWindow()
+        )
+        icon_tool_bar.addAction(self.action)
+        QObject.connect(self.action, SIGNAL("triggered()"), self.run)
+        self.toggle()
+
+    def run(self):
+        self.reverse_lines()
+        self.canvas.refresh()
+
+    def reverse_lines(self):
+        layer = self.canvas.currentLayer()
+        feats = layer.selectedFeatures()
+        layer.beginEditCommand('reverse lines')
+        for feat in feats:
+            old_geom = feat.geometry()
+            old_line = old_geom.asPolyline()
+            new_line = []
+            for pt in reversed(old_line):
+                new_line.append(pt)
+            new_geom = qgis.core.QgsGeometry.fromPolyline(new_line)
+            layer.changeGeometry(feat.id(), new_geom)
+        layer.endEditCommand()
