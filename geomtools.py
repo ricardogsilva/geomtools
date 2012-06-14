@@ -112,9 +112,10 @@ class Tool(object):
     def toggle_action(self):
         layer = self.canvas.currentLayer()
         action = False
-        for t in self.OPERATES_ON:
-            if layer.wkbType() == t.get('type'):
-                action = True
+        if layer.type() == qgis.core.QgsMapLayer.VectorLayer:
+            for t in self.OPERATES_ON:
+                if layer.wkbType() == t.get('type'):
+                    action = True
         if action:
             self.action.setVisible(True)
         else:
