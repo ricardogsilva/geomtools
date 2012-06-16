@@ -1,50 +1,72 @@
 #!/usr/bin/env python
 #-*- coding: utf-8 -*-
 
+'''
+A module implementing some base geometry classes with custom methods that
+expand on the QGIS classes.
+'''
+
 from math import pi, atan, atan2, cos, sin, radians, degrees, sqrt
 
 from qgis.core import QgsPoint, QgsGeometry
 from qgis.gui import QgsVertexMarker
 
 class Point(QgsPoint):
+    '''
+    A class to provide aditional methods to the QgsPoint class.
+    '''
 
     @staticmethod
     def from_feature(feature):
-        pt = feature.geometry().asPoint()
-        p = Point(pt.x(), pt.y())
-        return p
+        '''Return a Point object from a QGIS feature.'''
+
+        pnt = feature.geometry().asPoint()
+        return Point(pnt.x(), pnt.y())
 
     def angle(self, other_point):
         '''Return the angle between this point and other_point'''
 
-        dx = other_point.x() - self.x()
-        dy = other_point.y() - self.y()
-        angle = atan2(dy, dx)
+        offset_x = other_point.x() - self.x()
+        offset_y = other_point.y() - self.y()
+        angle = atan2(offset_y, offset_x)
         return degrees(angle)
 
     def translate(self, angle, distance):
+        '''Translate this instance using angle and distance.'''
+
         phi = radians(angle)
         self.setX(self.x() + cos(phi) * distance)
         self.setY(self.y() + sin(phi) * distance)
 
     def translate_offsets(self, off_x, off_y):
+        '''Translate this instance using x and y offsets.'''
+
         self.setX(self.x() + off_x)
         self.setY(self.y() + off_y)
 
     def distance(self, other_point):
-        dx = other_point.x() - self.x()
-        dy = other_point.y() - self.y()
-        return sqrt(dx ** 2 + dy ** 2)
+        '''
+        Return the distance between this instance and another Point object.
+        '''
+
+        offset_x = other_point.x() - self.x()
+        offset_y = other_point.y() - self.y()
+        return sqrt(offset_x ** 2 + offset_y ** 2)
 
     def rotate(self, angle, reference):
+        '''Rotate this instance around an input reference Point object.'''
+
         phi = radians(angle)
-        dx = self.x() - reference.x()
-        dy = self.y() - reference.y()
-        self.setX(dx * cos(phi) - dy * sin(phi) + reference.x())
-        self.setY(dx * sin(phi) + dy * cos(phi) + reference.y())
+        offset_x = self.x() - reference.x()
+        offset_y = self.y() - reference.y()
+        self.setX(offset_x * cos(phi) - offset_y * sin(phi) + reference.x())
+        self.setY(offset_x * sin(phi) + offset_y * cos(phi) + reference.y())
 
 
 class Line(object):
+    '''
+    A class to provide methods for working with lists of Point objects.
+    '''
 
     def __init__(self, points):
         self.points = points
@@ -62,60 +84,65 @@ class Line(object):
             The angle between this line and 'other_line', measured in degrees counter-clockwise from east.
         '''
 
-        s1 = self.slope()
-        s2 = other_line.slope()
-        if s1 is None or s2 is None:
-            if s1 is None:
-                m = s2
-            if s2 is None:
-                m = s1
+        sl1 = self.slope()
+        sl2 = other_line.slope()
+        if sl1 is None or sl2 is None:
+            if sl1 is None:
+                slope = sl2
+            if sl2 is None:
+                slope = sl1
             try:
-                phi = atan(abs(1 / m))
+                phi = atan(abs(1 / slope))
             except ZeroDivisionError:
                 phi = pi / 2
-        elif s1 == 0 or s2 == 0:
-            if s1 == 0:
-                m = s2
-            elif s2 == 0:
-                m = s1
-            phi = atan(abs(m))
+        elif sl1 == 0 or sl2 == 0:
+            if sl1 == 0:
+                slope = sl2
+            elif sl2 == 0:
+                slope = sl1
+            phi = atan(abs(slope))
         else:
-            if s1 > s2:
-                m1 = s2
-                m2 = s1
+            if sl1 > sl2:
+                slope1 = sl2
+                slope2 = sl1
             else:
-                m1 = s1
-                m2 = s2
-            phi = atan((m2 - m1) / (1 + m1 * m2))
+                slope1 = sl1
+                slope2 = sl2
+            phi = atan((slope2 - slope1) / (1 + slope1 * slope2))
         return degrees(phi)
 
     def translate(self, angle, distance):
-        phi = radians(angle)
-        for p in self.points:
-            p.translate(angle, distance)
+        '''Translate this instance using angle and distance.'''
+
+
+        for point in self.points:
+            point.translate(angle, distance)
 
     def translate_offsets(self, off_x, off_y):
-        for p in self.points:
-            p.translate_offsets(off_x, off_y)
+        '''Translate this instance using x and y offsets.'''
+        for point in self.points:
+            point.translate_offsets(off_x, off_y)
 
     def slope(self):
         '''Return the slope of this line.'''
+
         first = self.points[0]
         last = self.points[-1]
-        x = last.x() - first.x()
-        y = last.y() - first.y()
+        delta_x = last.x() - first.x()
+        delta_y = last.y() - first.y()
         try:
-            slope = y / x
+            slope = delta_y / delta_x
         except ZeroDivisionError:
             slope = None
         return slope
 
     def length(self):
         '''Return the length of this line.'''
+
         total_length = 0
-        for p in range(len(self.points) - 1):
-            first = self.points[p]
-            last = self.points[p+1]
+        for index in range(len(self.points) - 1):
+            first = self.points[index]
+            last = self.points[index+1]
             total_length += first.distance(last)
         return total_length
 
@@ -126,9 +153,13 @@ class Line(object):
         return self.point_on_line(dist)
 
     def first_point(self):
+        '''Return the first Point of this line.'''
+
         return self.points[0]
 
     def last_point(self):
+        '''Return the last Point of this line.'''
+
         return self.points[-1]
 
     def point_on_line(self, distance):
@@ -160,38 +191,54 @@ class Line(object):
 
         if reference is None:
             reference = self.points[0]
-        for p in self.points:
-            p.rotate(angle, reference)
+        for point in self.points:
+            point.rotate(angle, reference)
 
     def to_geometry(self):
         '''Return this line as a QgsGeometry instance.'''
-        g = QgsGeometry.fromPolyline(self.points)
-        return g
+
+        return QgsGeometry.fromPolyline(self.points)
 
     def __repr__(self):
-        return '%s' % [p for p in self.points]
+        return '%s' % [point for point in self.points]
         
 
 class VertexMarker(QgsVertexMarker):
+    '''
+    A class to provide aditional functionality to the QgsVertexMarker class.
+    '''
+
     point = Point(0, 0)
+    _xpos = point.x()
+    _ypos = point.y()
 
-    @property
-    def x(self):
-        return self.point.x()
+    def get_x(self):
+        '''Get the current x coordinate.'''
 
-    @x.setter
-    def x(self, x):
+        self._xpos = self.point.x()
+        return self._xpos
+
+    def set_x(self, x):
+        '''Set the current x coordinate.'''
+
         self.point.setX(x)
         self._update()
 
-    @property
-    def y(self):
-        return self.point.y()
+    x = property(set_x, get_x)
 
-    @y.setter
-    def y(self, y):
+    def set_y(self, y):
+        '''Set the current y coordinate.'''
+
         self.point.setY(y)
         self._update()
+
+    def get_y(self):
+        '''Get the current y coordinate.'''
+
+        self._ypos = self.point.y()
+        return self._ypos
+
+    y = property(set_y, get_y)
         
     def __init__(self, map_canvas, point=None):
         super(VertexMarker, self).__init__(map_canvas)
@@ -203,6 +250,8 @@ class VertexMarker(QgsVertexMarker):
         self._update()
 
     def translate(self, angle, distance):
+        '''Translate this instance with a given angle and distance.'''
+
         self.point.translate(angle, distance)
         self._update()
 
@@ -221,9 +270,13 @@ class VertexMarker(QgsVertexMarker):
         self._update()
 
     def to_point(self):
+        '''Return a Point object from this instance.'''
+
         return self.point
 
     def _update(self):
+        '''Update the instance\'s coordinates.'''
+
         self.setCenter(self.point)
         #self.canvas.refresh()
 
