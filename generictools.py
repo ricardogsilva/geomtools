@@ -11,6 +11,7 @@ import qgis.core
 import qgis.gui
 
 import base
+from referencetool import get_reference
 
 class Tool(object):
 

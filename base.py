@@ -224,13 +224,7 @@ class VertexMarker(QgsVertexMarker):
         self.point.setX(x)
         self._update()
 
-    x = property(set_x, get_x)
-
-    def set_y(self, y):
-        '''Set the current y coordinate.'''
-
-        self.point.setY(y)
-        self._update()
+    x = property(get_x, set_x)
 
     def get_y(self):
         '''Get the current y coordinate.'''
@@ -238,7 +232,13 @@ class VertexMarker(QgsVertexMarker):
         self._ypos = self.point.y()
         return self._ypos
 
-    y = property(set_y, get_y)
+    def set_y(self, y):
+        '''Set the current y coordinate.'''
+
+        self.point.setY(y)
+        self._update()
+
+    y = property(get_y, set_y)
         
     def __init__(self, map_canvas, point=None):
         super(VertexMarker, self).__init__(map_canvas)

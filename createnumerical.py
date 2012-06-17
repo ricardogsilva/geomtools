@@ -20,8 +20,7 @@ class CreateNumerical(generictools.ToolWithReference):
     target_marker_icon = qgis.gui.QgsVertexMarker.ICON_BOX
     rubber_band_color = target_marker_color
 
-    def __init__(self, iface, icon_tool_bar, controls_tool_bar, action, 
-                 parameters=dict()):
+    def __init__(self, iface, icon_tool_bar, controls_tool_bar, action):
         super(CreateNumerical, self).__init__(iface, icon_tool_bar, 
                                               controls_tool_bar)
         self.parameters = {
@@ -30,7 +29,6 @@ class CreateNumerical(generictools.ToolWithReference):
             'distance' : 0.0,
             'angle' : 0.0,
         }
-        self.parameters.update(parameters)
         target_marker = base.VertexMarker(self.canvas, base.Point())
         target_marker.setColor(self.target_marker_color)
         target_marker.setIconType(self.target_marker_icon)
@@ -59,41 +57,18 @@ class CreateNumerical(generictools.ToolWithReference):
                 else:
                     element.hide()
 
-
-class CreateNumericalPoints(CreateNumerical):
-    operates_on = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 0}]
-
-    def __init__(self, iface, icon_tool_bar, controls_tool_bar):
-        action = QtGui.QAction(
-            QtGui.QIcon(':plugins/cadtools/icons/pointandline.png'), 
-            'create point with numerical input', 
-            None
-        )
-        super(CreateNumericalPoints, self).__init__(iface, icon_tool_bar, 
-                                              controls_tool_bar, action)
-
     def _create_controls(self):
-        super(CreateNumericalPoints, self)._create_controls()
-        self.offset_radio = QRadioButton('Offset', None)
-        self.angle_dist_radio = QRadioButton('Angle && distance', None)
-
-        self.coor_x_lab = QLabel(None)
-        self.coor_x_lab.setText('X')
-        self.coor_x_le = QLineEdit(None)
-        self.coor_y_lab = QLabel(None)
-        self.coor_y_lab.setText('Y')
-        self.coor_y_le = QLineEdit(None)
-
-        self.coor_distance_lab = QLabel(None)
-        self.coor_distance_lab.setText('Distance')
-        self.coor_distance_le = QLineEdit(None)
-        self.coor_angle_lab = QLabel(None)
-        self.coor_angle_lab.setText('Angle')
-        self.coor_angle_le = QLineEdit(None)
-
-        self.create_point_btn = QPushButton(None)
-        self.create_point_btn.setText('Create')
-
+        super(CreateNumerical, self)._create_controls()
+        self.offset_radio = QtGui.QRadioButton('Offset', None)
+        self.angle_dist_radio = QtGui.QRadioButton('Angle && distance', None)
+        self.coor_x_lab = QtGui.QLabel('X', None)
+        self.coor_x_le = QtGui.QLineEdit(None)
+        self.coor_y_lab = QtGui.QLabel('Y', None)
+        self.coor_y_le = QtGui.QLineEdit(None)
+        self.coor_distance_lab = QtGui.QLabel('Distance', None)
+        self.coor_distance_le = QtGui.QLineEdit(None)
+        self.coor_angle_lab = QtGui.QLabel('Angle', None)
+        self.coor_angle_le = QtGui.QLineEdit(None)
         QtCore.QObject.connect(
             self.coor_x_le, 
             QtCore.SIGNAL('textChanged(const QString &)'), 
@@ -114,10 +89,6 @@ class CreateNumericalPoints(CreateNumerical):
             QtCore.SIGNAL('textChanged(const QString &)'), 
             self.change_target_angle
         )
-        QtCore.QObject.connect(self.create_point_btn, 
-                               QtCore.SIGNAL('released()'), 
-                               self.create_point)
-
         self.tool_bar.addWidget(self.offset_radio)
         self.tool_bar.addWidget(self.angle_dist_radio)
         # storing QActions in order to be able to hide and show them later
@@ -134,8 +105,6 @@ class CreateNumericalPoints(CreateNumerical):
                                self.toggle_mode_controls)
         self.offset_radio.setChecked(True)
         self.tool_bar.addSeparator()
-        self.tool_bar.addWidget(self.create_point_btn)
-        self._update_controls()
 
     def toggle_mode_controls(self, offsets_active):
         if offsets_active:
@@ -158,6 +127,13 @@ class CreateNumericalPoints(CreateNumerical):
             self.action_coor_angle_le.setVisible(True)
         self.update_target_marker_position()
 
+    def _update_controls(self):
+        super(CreateNumerical, self)._update_controls()
+        self.coor_x_le.setText(str(self.parameters.get('offset_x')))
+        self.coor_y_le.setText(str(self.parameters.get('offset_y')))
+        self.coor_distance_le.setText(str(self.parameters.get('distance')))
+        self.coor_angle_le.setText(str(self.parameters.get('angle')))
+
     def change_target_offset_x(self, the_text):
         self.parameters['offset_x'] = QtCore.QVariant(the_text).toFloat()[0]
         self.update_target_marker_position()
@@ -174,21 +150,37 @@ class CreateNumericalPoints(CreateNumerical):
         self.parameters['angle'] = QtCore.QVariant(the_text).toFloat()[0]
         self.update_target_marker_position()
 
-    def _update_controls(self):
-        super(CreateNumericalPoints, self)._update_controls()
-        self.coor_x_le.setText(str(self.parameters.get('offset_x')))
-        self.coor_y_le.setText(str(self.parameters.get('offset_y')))
-        self.coor_distance_le.setText(str(self.parameters.get('distance')))
-        self.coor_angle_le.setText(str(self.parameters.get('angle')))
-
     def update_reference_marker_position(self):
-        super(CreateNumericalPoints, self).update_reference_marker_position()
+        super(CreateNumerical, self).update_reference_marker_position()
         self.update_target_marker_position()
 
     def update_target_marker_position(self):
         new_point = self.calculate_point()
-        self.canvas_elements['target_marker.x'] = new_point.x()
-        self.canvas_elements['target_marker.y'] = new_point.y()
+        self.canvas_elements['target_marker'].x = new_point.x()
+        self.canvas_elements['target_marker'].y = new_point.y()
+
+
+class CreateNumericalPoints(CreateNumerical):
+    operates_on = [{'type' : qgis.core.QGis.WKBPoint, 'features' : 0}]
+
+    def __init__(self, iface, icon_tool_bar, controls_tool_bar):
+        action = QtGui.QAction(
+            QtGui.QIcon(':plugins/cadtools/icons/pointandline.png'), 
+            'create point with numerical input', 
+            None
+        )
+        super(CreateNumericalPoints, self).__init__(iface, icon_tool_bar, 
+                                              controls_tool_bar, action)
+
+    def _create_controls(self):
+        super(CreateNumericalPoints, self)._create_controls()
+        self.create_point_btn = QtGui.QPushButton(None)
+        self.create_point_btn.setText('Create')
+        QtCore.QObject.connect(self.create_point_btn, 
+                               QtCore.SIGNAL('released()'), 
+                               self.create_point)
+        self.tool_bar.addWidget(self.create_point_btn)
+        self._update_controls()
 
     def calculate_point(self):
         new_point = base.Point(self.reference.x(), self.reference.y())
@@ -221,49 +213,48 @@ class CreateNumericalLine(CreateNumerical):
             'create line with numerical input', 
             None
         )
-        parameters = {
+        super(CreateNumericalLine, self).__init__(iface, icon_tool_bar, 
+                                                  controls_tool_bar, action)
+        self.parameters.update({
             'use_last_point' : False,
             'line' : [],
-        }
+        })
 
         rubber_band = qgis.gui.QgsRubberBand(self.canvas, False)
         rubber_band.setColor(self.rubber_band_color)
         rubber_band.hide()
         self.canvas_elements['rubber_band'] = rubber_band
         self.canvas_elements['rubber_markers'] = []
-        super(CreateNumericalLine, self).__init__(iface, icon_tool_bar, 
-                                                  controls_tool_bar, action, 
-                                                  parameters)
 
     def _create_controls(self):
         super(CreateNumericalLine, self)._create_controls()
 
         self.last_point_ref_cb = QCheckBox('Use last point as reference', None)
 
-        self.offset_radio = QRadioButton('Offset', None)
-        self.angle_dist_radio = QRadioButton('Angle && distance', None)
+        self.offset_radio = QtGui.QRadioButton('Offset', None)
+        self.angle_dist_radio = QtGui.QRadioButton('Angle && distance', None)
 
-        self.coor_x_lab = QLabel(None)
+        self.coor_x_lab = QtGui.QLabel(None)
         self.coor_x_lab.setText('X')
-        self.coor_x_le = QLineEdit(None)
-        self.coor_y_lab = QLabel(None)
+        self.coor_x_le = QtGui.QLineEdit(None)
+        self.coor_y_lab = QtGui.QLabel(None)
         self.coor_y_lab.setText('Y')
-        self.coor_y_le = QLineEdit(None)
+        self.coor_y_le = QtGui.QLineEdit(None)
 
-        self.coor_distance_lab = QLabel(None)
+        self.coor_distance_lab = QtGui.QLabel(None)
         self.coor_distance_lab.setText('Distance')
-        self.coor_distance_le = QLineEdit(None)
-        self.coor_angle_lab = QLabel(None)
+        self.coor_distance_le = QtGui.QLineEdit(None)
+        self.coor_angle_lab = QtGui.QLabel(None)
         self.coor_angle_lab.setText('Angle')
-        self.coor_angle_le = QLineEdit(None)
+        self.coor_angle_le = QtGui.QLineEdit(None)
 
-        self.remove_vertex_btn = QPushButton(None)
+        self.remove_vertex_btn = QtGui.QPushButton(None)
         self.remove_vertex_btn.setText('Remove vertex')
-        self.add_vertex_btn = QPushButton(None)
+        self.add_vertex_btn = QtGui.QPushButton(None)
         self.add_vertex_btn.setText('Add vertex')
-        self.clear_line_btn = QPushButton(None)
+        self.clear_line_btn = QtGui.QPushButton(None)
         self.clear_line_btn.setText('Clear line')
-        self.finish_line_btn = QPushButton(None)
+        self.finish_line_btn = QtGui.QPushButton(None)
         self.finish_line_btn.setText('Finish line')
 
         QtCore.QObject.connect(
@@ -479,17 +470,16 @@ class CreateNumericalPolygon(CreateNumerical):
             'create polygon with numerical input', 
             None
         )
-        parameters = {
+        super(CreateNumericalPolygon, self).__init__(iface, icon_tool_bar, 
+                                                     controls_tool_bar, action)
+        self.parameters.update({
             'use_last_point' : False,
             'line' : [],
             'rubber_markers' : [],
-        }
+        })
 
         self.rubber_band = qgis.gui.QgsRubberBand(self.canvas, True)
         self.rubber_band.setColor(self.rubber_band_color)
         self.rubber_band.hide()
-        super(CreateNumericalPolygon, self).__init__(iface, icon_tool_bar, 
-                                                     controls_tool_bar, action, 
-                                                     parameters)
 
 
