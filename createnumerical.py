@@ -44,7 +44,9 @@ class CreateNumerical(generictools.ToolWithReference):
 
     def run(self, active):
         self.toggle_controls(active)
-        for id, element in self.canvas_elements.iteritems():
+        for the_id, element in self.canvas_elements.iteritems():
+            print('the_id: %s' % the_id)
+            print('element: %s' % element)
             if isinstance(element, list):
                 for i in element:
                     if active:
@@ -229,7 +231,7 @@ class CreateNumericalLine(CreateNumerical):
     def _create_controls(self):
         super(CreateNumericalLine, self)._create_controls()
 
-        self.last_point_ref_cb = QCheckBox('Use last point as reference', None)
+        self.last_point_ref_cb = QtGui.QCheckBox('Use last point as reference', None)
 
         self.offset_radio = QtGui.QRadioButton('Offset', None)
         self.angle_dist_radio = QtGui.QRadioButton('Angle && distance', None)
@@ -435,8 +437,8 @@ class CreateNumericalLine(CreateNumerical):
 
     def update_target_marker_position(self):
         new_point = self._get_current_point()
-        self.canvas_elements['target_marker.x'] = new_point.x()
-        self.canvas_elements['target_marker.y'] = new_point.y()
+        self.canvas_elements['target_marker'].x = new_point.x()
+        self.canvas_elements['target_marker'].y = new_point.y()
 
     def toggle_mode_controls(self, offsets_active):
         if offsets_active:
